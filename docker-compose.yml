@@ -1,0 +1,23 @@
+# Local Postgres. Published on 5434 to stay clear of other local Postgres
+# servers, which commonly use 5432 and 5433.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: turnout-postgres
+    environment:
+      POSTGRES_USER: turnout
+      POSTGRES_PASSWORD: turnout
+      POSTGRES_DB: turnout
+    ports:
+      - "5434:5432"
+    volumes:
+      - turnout-postgres-data:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U turnout -d turnout"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  turnout-postgres-data:
