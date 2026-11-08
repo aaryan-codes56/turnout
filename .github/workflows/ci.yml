@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: turnout
+          POSTGRES_PASSWORD: turnout
+          POSTGRES_DB: turnout_test
+        # Same published port as docker-compose.yml.
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U turnout -d turnout_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    # Placeholders so the build's env validation passes. No real secrets in CI.
+    env:
+      DATABASE_URL: postgres://turnout:turnout@localhost:5434/turnout_test
+      BETTER_AUTH_SECRET: ci-placeholder-secret-at-least-32-characters
+      GOOGLE_CLIENT_ID: ci-placeholder
+      GOOGLE_CLIENT_SECRET: ci-placeholder
+      APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
