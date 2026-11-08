@@ -6,11 +6,10 @@ import { env } from "@/lib/env";
 import { db } from "@/server/db/client";
 import * as schema from "@/server/db/schema";
 
-import { checkSignInIdentity, parseAllowedDomains } from "./email-domain";
+import { applyPendingInvites } from "@/server/services/members";
 
-export const allowedEmailDomains = parseAllowedDomains(
-  env.ALLOWED_EMAIL_DOMAINS,
-);
+import { allowedEmailDomains } from "./allowed-domains";
+import { checkSignInIdentity } from "./email-domain";
 
 export const auth = betterAuth({
   baseURL: env.APP_URL,
@@ -44,6 +43,22 @@ export const auth = betterAuth({
         required: false,
         defaultValue: false,
         input: false,
+      },
+    },
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        // Every sign-in, not only the first, so an invite that lost a race
+        // with signing up is still picked up next time. See decisions.md.
+        after: async (session) => {
+          try {
+            await applyPendingInvites(session.userId);
+          } catch (error) {
+            // A broken invite shouldn't stop someone from signing in.
+            console.error("Failed to apply pending club invites", error);
+          }
+        },
       },
     },
   },

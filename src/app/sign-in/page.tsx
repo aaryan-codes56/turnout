@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
-import { allowedEmailDomains } from "@/server/auth/auth";
+import { allowedEmailDomains } from "@/server/auth/allowed-domains";
 import { SIGN_IN_ERROR } from "@/server/auth/email-domain";
 import { getCurrentUser } from "@/server/auth/session";
 

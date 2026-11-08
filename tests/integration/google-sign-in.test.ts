@@ -4,7 +4,14 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { auth } from "@/server/auth/auth";
 import { getCurrentUser } from "@/server/auth/session";
 import { db, pool } from "@/server/db/client";
-import { accounts, sessions, users } from "@/server/db/schema";
+import {
+  accounts,
+  clubInvites,
+  clubMemberships,
+  clubs,
+  sessions,
+  users,
+} from "@/server/db/schema";
 
 // These tests drive the real Better Auth routes and a real Postgres. Only
 // Google's token endpoint is replaced, so everything after "Google says this
@@ -178,6 +185,41 @@ describe("Google sign-in", () => {
 
     expect(redirectError(response)).toBe("domain_not_allowed");
     expect(await rowCounts()).toEqual({ users: 1, accounts: 1, sessions: 0 });
+  });
+});
+
+describe("pending club invites", () => {
+  it("turns into a membership on first sign-in", async () => {
+    const [owner] = await db
+      .insert(users)
+      .values({ email: "owner@rishihood.edu.in", name: "Owner" })
+      .returning();
+    const [club] = await db
+      .insert(clubs)
+      .values({
+        slug: "invite-test",
+        name: "Invite Test",
+        description: "A club that only exists for tests.",
+        status: "ACTIVE",
+        createdBy: owner.id,
+      })
+      .returning();
+    await db.insert(clubInvites).values({
+      clubId: club.id,
+      email: student.email,
+      role: "VOLUNTEER",
+      invitedBy: owner.id,
+    });
+
+    await signInWithGoogle(student);
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, student.email));
+    expect(await db.select().from(clubMemberships)).toMatchObject([
+      { clubId: club.id, userId: user.id, role: "VOLUNTEER" },
+    ]);
   });
 });
 
