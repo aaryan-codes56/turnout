@@ -440,6 +440,21 @@ describe("payment captured after the hold expired", () => {
     expect(sendMail).toHaveBeenCalledTimes(1);
   });
 
+  it("doesn't issue a ticket if a duplicate arrives after a refund was queued", async () => {
+    const { event, orderId, registration } = await pendingPayment(
+      { capacity: 1, seatsTaken: 1 },
+      expired,
+    );
+    await confirmPayment({ orderId, paymentId: "pay_l" });
+    await db.update(events).set({ seatsTaken: 0 }).where(eq(events.id, event.id));
+
+    expect(await confirmPayment({ orderId, paymentId: "pay_l" })).toBe("IGNORED");
+
+    expect(await statusOf(registration.id)).toBe("EXPIRED");
+    expect(await seatsTaken(event.id)).toBe(0);
+    expect(await jobs(JOBS.sendTicketEmail)).toEqual([]);
+  });
+
   it("refunds if they have since registered again", async () => {
     const { event, user, orderId } = await pendingPayment(
       { capacity: 5, seatsTaken: 1 },

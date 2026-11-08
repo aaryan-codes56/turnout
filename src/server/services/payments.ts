@@ -146,6 +146,11 @@ export async function confirmPayment(params: {
 
     if (registration.status === "CONFIRMED") return "ALREADY_CONFIRMED";
     if (registration.status === "REFUNDED") return "IGNORED";
+    // A late payment is decided once, when it's first captured. If a refund
+    // was queued, a repeat delivery must not issue a ticket for that money.
+    if (payment.status === "CAPTURED" && registration.status !== "PENDING_PAYMENT") {
+      return "IGNORED";
+    }
 
     const queueTicket = () =>
       enqueue(
