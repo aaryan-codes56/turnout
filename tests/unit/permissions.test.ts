@@ -68,6 +68,7 @@ const SPEC: Record<Action, Persona[]> = {
   "platform.viewMetrics": SUPER,
   "platform.viewFailedJobs": SUPER,
   "audit.view": SUPER,
+  "event.markTest": SUPER,
 };
 
 const CLUB_SCOPED = ACTIONS.filter(

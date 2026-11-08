@@ -60,6 +60,7 @@ const PERMISSIONS = {
   "platform.viewMetrics": superAdmins,
   "platform.viewFailedJobs": superAdmins,
   "audit.view": superAdmins,
+  "event.markTest": superAdmins,
 } as const satisfies Record<string, readonly MatrixRole[]>;
 
 export type Action = keyof typeof PERMISSIONS;

@@ -6,4 +6,10 @@ export const integrationEnv = {
   GOOGLE_CLIENT_SECRET: "test-google-client-secret",
   ALLOWED_EMAIL_DOMAINS: "nst.rishihood.edu.in,rishihood.edu.in",
   APP_URL: "http://localhost:3000",
+  QR_SIGNING_SECRET: "integration-test-qr-secret-not-used-anywhere",
+  RAZORPAY_KEY_ID: "rzp_test_integration",
+  RAZORPAY_KEY_SECRET: "integration-test-key-secret",
+  RAZORPAY_WEBHOOK_SECRET: "integration-test-webhook-secret",
+  GMAIL_USER: "turnout.test@example.com",
+  GMAIL_APP_PASSWORD: "not-a-real-password",
 };

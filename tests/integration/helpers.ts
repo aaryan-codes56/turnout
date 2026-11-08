@@ -3,12 +3,22 @@ import { randomUUID } from "node:crypto";
 import { loadActor } from "@/server/auth/actor";
 import type { ClubRole } from "@/server/auth/permissions";
 import { db, pool } from "@/server/db/client";
-import { auditLogs, clubMemberships, clubs, users } from "@/server/db/schema";
+import {
+  auditLogs,
+  clubMemberships,
+  clubs,
+  events,
+  registrations,
+  users,
+} from "@/server/db/schema";
+import type { JobName } from "@/server/jobs/definitions";
+import { getBoss } from "@/server/jobs/queue";
 
 export async function resetDatabase() {
   await pool.query(
-    "TRUNCATE users, sessions, accounts, verifications, clubs, club_memberships, club_invites, audit_logs RESTART IDENTITY CASCADE",
+    "TRUNCATE users, sessions, accounts, verifications, clubs, club_memberships, club_invites, audit_logs, events, registrations, payments, webhook_events, metrics_snapshots, sent_emails, rate_limits RESTART IDENTITY CASCADE",
   );
+  await pool.query("DELETE FROM pgboss.job");
 }
 
 export async function createUser(
@@ -70,4 +80,58 @@ export async function settle(promises: Promise<unknown>[]) {
       .filter((r) => r.status === "rejected")
       .map((r) => r.reason),
   };
+}
+
+const HOUR = 60 * 60 * 1000;
+
+export async function createEvent(
+  clubId: string,
+  overrides: Partial<typeof events.$inferInsert> = {},
+) {
+  const id = randomUUID();
+  const now = Date.now();
+  const [event] = await db
+    .insert(events)
+    .values({
+      id,
+      clubId,
+      slug: `event-${id}`,
+      title: "Test Event",
+      descriptionMd: "An event that only exists for tests.",
+      venue: "Main Hall",
+      startsAt: new Date(now + HOUR),
+      endsAt: new Date(now + 3 * HOUR),
+      capacity: 100,
+      status: "PUBLISHED",
+      registrationOpensAt: new Date(now - HOUR),
+      registrationClosesAt: new Date(now + HOUR),
+      ...overrides,
+    })
+    .returning();
+  return event;
+}
+
+export async function createRegistration(
+  eventId: string,
+  user: { id: string },
+  overrides: Partial<typeof registrations.$inferInsert> = {},
+) {
+  const [registration] = await db
+    .insert(registrations)
+    .values({ eventId, userId: user.id, status: "CONFIRMED", ...overrides })
+    .returning();
+  return registration;
+}
+
+export async function jobs(name: JobName) {
+  const { rows } = await pool.query(
+    "SELECT id, data, start_after FROM pgboss.job WHERE name = $1",
+    [name],
+  );
+  return rows as { id: string; data: Record<string, unknown>; start_after: Date }[];
+}
+
+export async function closeConnections() {
+  await (await getBoss()).stop({ graceful: false });
+  await pool.end();
 }

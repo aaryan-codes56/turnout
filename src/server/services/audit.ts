@@ -7,7 +7,14 @@ export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type AuditEntry = {
   actorId: string | null;
   action: string;
-  entityType: "club" | "club_invite" | "club_membership" | "user";
+  entityType:
+    | "club"
+    | "club_invite"
+    | "club_membership"
+    | "event"
+    | "job"
+    | "registration"
+    | "user";
   entityId: string;
   metadata?: Record<string, unknown>;
 };

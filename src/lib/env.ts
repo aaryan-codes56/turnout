@@ -4,10 +4,11 @@ import { z } from "zod";
 const blankToUndefined = (value: unknown) => (value === "" ? undefined : value);
 const required = z.preprocess(blankToUndefined, z.string().min(1));
 const optional = z.preprocess(blankToUndefined, z.string().min(1).optional());
+const secret = z.preprocess(blankToUndefined, z.string().min(32));
 
 const envSchema = z.object({
   DATABASE_URL: required,
-  BETTER_AUTH_SECRET: z.preprocess(blankToUndefined, z.string().min(32)),
+  BETTER_AUTH_SECRET: secret,
   GOOGLE_CLIENT_ID: required,
   GOOGLE_CLIENT_SECRET: required,
   ALLOWED_EMAIL_DOMAINS: z.preprocess(
@@ -15,13 +16,14 @@ const envSchema = z.object({
     z.string().min(1).default("nst.rishihood.edu.in,rishihood.edu.in"),
   ),
   APP_URL: z.preprocess(blankToUndefined, z.url()),
+  QR_SIGNING_SECRET: secret,
 
-  // Required by the phase that introduces them.
+  // Free events work without these. Paid events and email need them.
   RAZORPAY_KEY_ID: optional,
   RAZORPAY_KEY_SECRET: optional,
   RAZORPAY_WEBHOOK_SECRET: optional,
-  QR_SIGNING_SECRET: optional,
-  RESEND_API_KEY: optional,
+  GMAIL_USER: optional,
+  GMAIL_APP_PASSWORD: optional,
   EMAIL_FROM: optional,
   SENTRY_DSN: optional,
 });
