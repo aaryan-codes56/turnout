@@ -109,3 +109,105 @@ Short notes on non-obvious choices: what we chose, why, and what we rejected.
 **Chose:** `scripts/script-db.ts` reads only `DATABASE_URL`.
 **Why:** Seeding shouldn't need Google OAuth values just because the app's env validation does.
 **Rejected:** Relaxing the app's validation, which protects production.
+
+## pg-boss rather than BullMQ
+
+**Chose:** pg-boss, with the queue stored in Postgres.
+**Why:** A job can be queued in the same transaction as the change that caused it, so a confirmed registration can't lose its email. It's also one less service to run.
+**Rejected:** BullMQ, which needs Redis and can't join a Postgres transaction. Its much higher throughput isn't needed here.
+
+## A counter column reserves seats
+
+**Chose:** `UPDATE events SET seats_taken = seats_taken + 1 WHERE seats_taken < capacity`, plus a `CHECK` constraint.
+**Why:** It's one statement that Postgres serialises on the row, and the lock lasts only as long as the transaction. The constraint makes overselling impossible even if application code is wrong.
+**Rejected:** `SELECT ... FOR UPDATE` then a count, which is more code for the same guarantee. Counting registrations on every request, which gets slower as an event fills.
+
+## The webhook is the source of truth for payments
+
+**Chose:** The browser callback is only a fast path. The webhook and the reconciliation job can each confirm on their own.
+**Why:** Students close tabs and lose signal after paying, so the browser may never report back. Razorpay retries webhooks, and reconciliation covers a webhook that's late or lost.
+**Rejected:** Trusting the browser alone, which loses paid tickets.
+
+## One function confirms a payment
+
+**Chose:** Every path calls `confirmPayment`, which locks the payment row first.
+**Why:** Three callers can race. Under the lock, only the first finds `PENDING_PAYMENT`, and it queues the email in the same transaction.
+**Rejected:** Per-caller checks and dedupe flags, where each new path is a new chance for a double confirmation.
+
+## Webhook events are marked processed afterwards
+
+**Chose:** Insert the event id, process it, then set `processed_at`. Only a row with `processed_at` counts as a duplicate.
+**Why:** If processing crashes midway, Razorpay's retry finishes the work. Concurrent deliveries are safe because confirmation is idempotent.
+**Rejected:** Treating the insert alone as "done", which would drop any event that crashed partway through.
+
+## The order is created outside the transaction
+
+**Chose:** Commit the seat hold, then call Razorpay. If that fails, release the seat in a new transaction.
+**Why:** Holding a row lock during a network call would make everyone registering for that event wait on Razorpay.
+**Rejected:** One long transaction.
+
+## Job ids come from business keys
+
+**Chose:** A UUID derived from a hash of keys like `send-ticket-email:<registration id>`.
+**Why:** pg-boss ignores a repeated id, so queueing the same work twice does nothing.
+**Rejected:** Random ids plus a check for an existing job, which can race.
+
+## Rescheduling doesn't cancel old jobs
+
+**Chose:** Reminders carry the event's start time. A time change queues new ones, and old ones see the mismatch and exit.
+**Why:** It needs no job bookkeeping, and it can't fail halfway through a cancel-and-recreate.
+**Rejected:** Storing job ids to cancel later.
+
+## `sent_emails` prevents duplicates on retry
+
+**Chose:** One row per email key, written after a successful send.
+**Why:** A reminder job emails a list. If it fails at person 40, the retry skips the first 39. A crash between sending and recording could still send one duplicate, which is better than risking a lost ticket.
+**Rejected:** Marking first and sending second, where a failed send is never retried.
+
+## Refunds ask Razorpay first
+
+**Chose:** `executeRefund` fetches existing refunds before creating one.
+**Why:** If the worker crashes after Razorpay accepts a refund but before saving the result, a retry must not refund again.
+**Rejected:** Relying on our own database, which is exactly what's out of date in that crash.
+
+## Gmail SMTP instead of Resend
+
+**Chose:** Nodemailer over Gmail with an App Password, keeping React Email templates. Changes the original stack.
+**Why:** Resend only delivers to other people from a verified domain, and this project doesn't have one. All sending goes through one function, so switching later is a small change.
+**Rejected:** Resend without a domain, which can only email the account owner. Gmail's daily sending limit is fine at this scale.
+
+## A small markdown renderer
+
+**Chose:** About 70 lines that turn a markdown subset into React elements.
+**Why:** The approved stack has no markdown library. Building elements rather than HTML means event text can't inject scripts, and links are limited to http and https.
+**Rejected:** `dangerouslySetInnerHTML` with a sanitiser, and adding a dependency for a handful of formats.
+
+## One QR decoder
+
+**Chose:** `@zxing/browser` everywhere.
+**Why:** iPhones don't support the native `BarcodeDetector`, so zxing is needed anyway. One code path means one thing to test.
+**Rejected:** Native detection with a zxing fallback, which means two paths for a small speed gain.
+
+## No test login route
+
+**Chose:** End-to-end tests write a session row and sign the cookie with the test secret.
+**Why:** The production app contains no login bypass at all, so there's nothing to leave switched on by mistake.
+**Rejected:** A `/api/test/login` route guarded by an environment variable.
+
+## Rate limits live in Postgres
+
+**Chose:** A fixed-window counter updated with one upsert.
+**Why:** Vercel runs many short-lived instances, so a counter in memory wouldn't be shared. It adds one small query, and the load test shows that's fine.
+**Rejected:** Redis, another service to run. In-memory counters, which don't work across instances.
+
+## Failed jobs are read from pg-boss's table
+
+**Chose:** A direct `SELECT` on `pgboss.job`.
+**Why:** pg-boss can look up jobs by queue but has no way to list failed jobs across all queues. This is the one place the app depends on its internal schema.
+**Rejected:** A separate failure table, which could drift from the real job state.
+
+## Event times and tickets are shown in India time
+
+**Chose:** Store UTC, and read form input as `+05:30` regardless of the browser or server timezone.
+**Why:** Vercel runs in UTC, and everyone using this is on one campus.
+**Rejected:** Per-user timezones, which multi-college support would need and this project doesn't.

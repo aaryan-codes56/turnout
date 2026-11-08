@@ -3,7 +3,13 @@
 
 import { eq } from "drizzle-orm";
 
-import { clubMemberships, clubs, users } from "../src/server/db/schema";
+import {
+  clubMemberships,
+  clubs,
+  events,
+  registrations,
+  users,
+} from "../src/server/db/schema";
 import { databaseUrl, db, pool } from "./script-db";
 
 const demoUsers = [
@@ -60,6 +66,54 @@ const demoClubs: {
   },
 ];
 
+const DAY = 24 * 60 * 60 * 1000;
+const inDays = (days: number, hour = 12.5) =>
+  new Date(Math.floor(Date.now() / DAY) * DAY + days * DAY + hour * 60 * 60 * 1000);
+
+const demoEvents = [
+  {
+    club: "demo-robotics-society",
+    slug: "demo-line-follower-workshop",
+    title: "Line Follower Workshop",
+    descriptionMd:
+      "Build a line-following robot in one evening.\n\n- Kits provided\n- No soldering experience needed\n- Teams of **two**",
+    venue: "Lab 204, Academic Block",
+    startsIn: 4,
+    capacity: 40,
+    pricePaise: 0,
+    status: "PUBLISHED" as const,
+    attendees: 3,
+    checkedIn: 0,
+  },
+  {
+    club: "demo-open-mic-collective",
+    slug: "demo-winter-open-mic",
+    title: "Winter Open Mic",
+    descriptionMd:
+      "Five minutes, one microphone, the whole lawn listening.\n\nSign up on the night or just come to watch.",
+    venue: "Central Lawn",
+    startsIn: 9,
+    capacity: 150,
+    pricePaise: 4900,
+    status: "PUBLISHED" as const,
+    attendees: 0,
+    checkedIn: 0,
+  },
+  {
+    club: "demo-robotics-society",
+    slug: "demo-battle-bots-finale",
+    title: "Battle Bots Finale",
+    descriptionMd: "The season's last match, and the trophy handover.",
+    venue: "Sports Complex",
+    startsIn: -12,
+    capacity: 80,
+    pricePaise: 0,
+    status: "COMPLETED" as const,
+    attendees: 5,
+    checkedIn: 4,
+  },
+];
+
 async function main() {
   const { hostname } = new URL(databaseUrl as string);
   if (hostname !== "localhost" && hostname !== "127.0.0.1") {
@@ -96,9 +150,41 @@ async function main() {
           .onConflictDoNothing();
       }
     }
+
+    for (const { club, startsIn, attendees, checkedIn, ...event } of demoEvents) {
+      const [{ id: clubId }] = await tx
+        .select({ id: clubs.id })
+        .from(clubs)
+        .where(eq(clubs.slug, club));
+      const startsAt = inDays(startsIn);
+      const [created] = await tx
+        .insert(events)
+        .values({
+          ...event,
+          clubId,
+          startsAt,
+          endsAt: new Date(startsAt.getTime() + 3 * 60 * 60 * 1000),
+          registrationOpensAt: inDays(startsIn - 14),
+          registrationClosesAt: startsAt,
+          seatsTaken: attendees,
+          isTest: true,
+        })
+        .onConflictDoNothing({ target: events.slug })
+        .returning({ id: events.id });
+      if (!created) continue;
+
+      for (const [index, user] of demoUsers.slice(0, attendees).entries()) {
+        await tx.insert(registrations).values({
+          eventId: created.id,
+          userId: userId(user.email),
+          status: "CONFIRMED",
+          checkedInAt: index < checkedIn ? startsAt : null,
+        });
+      }
+    }
   });
   console.log(
-    `Seeded ${demoUsers.length} users and ${demoClubs.length} clubs (is_test = true).`,
+    `Seeded ${demoUsers.length} users, ${demoClubs.length} clubs and ${demoEvents.length} events (is_test = true).`,
   );
 }
 
