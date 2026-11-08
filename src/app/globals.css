@@ -1,0 +1,118 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-display);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-stub: var(--stub);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Brand colours come from a raffle ticket and a door stamp.
+ * Green, yellow and red are kept free for scanner results.
+ */
+:root {
+  --background: #fbf9ff; /* paper */
+  --foreground: #21125e; /* stamp ink */
+  --stub: #ff9fc0; /* raffle-ticket pink */
+  --card: #ffffff;
+  --card-foreground: #21125e;
+  --popover: #ffffff;
+  --popover-foreground: #21125e;
+  --primary: #21125e;
+  --primary-foreground: #fbf9ff;
+  --secondary: #ece7f8;
+  --secondary-foreground: #21125e;
+  --muted: #ece7f8;
+  --muted-foreground: #5f5489;
+  --accent: #ece7f8;
+  --accent-foreground: #21125e;
+  --destructive: #b3261e;
+  --border: #d9d2ee;
+  --input: #d9d2ee;
+  --ring: #5b46c9;
+  --radius: 0.625rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  /* Two half-circle bites where the stub tears off. */
+  .ticket-stub {
+    --notch: 0.9rem;
+    --tear: 74%;
+    -webkit-mask-image:
+      radial-gradient(circle var(--notch) at var(--tear) 0, #0000 98%, #000),
+      radial-gradient(circle var(--notch) at var(--tear) 100%, #0000 98%, #000);
+    -webkit-mask-composite: source-in;
+    mask-image:
+      radial-gradient(circle var(--notch) at var(--tear) 0, #0000 98%, #000),
+      radial-gradient(circle var(--notch) at var(--tear) 100%, #0000 98%, #000);
+    mask-composite: intersect;
+  }
+
+  .ticket-tear {
+    left: var(--tear);
+  }
+
+  .door-stamp {
+    transform: rotate(-11deg);
+    animation: stamp-land 320ms cubic-bezier(0.3, 0, 0.2, 1) 550ms both;
+  }
+}
+
+@keyframes stamp-land {
+  from {
+    opacity: 0;
+    transform: rotate(-4deg) scale(1.9);
+  }
+  to {
+    opacity: 0.88;
+    transform: rotate(-11deg) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .door-stamp {
+    animation: none;
+    opacity: 0.88;
+  }
+}
