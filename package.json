@@ -16,7 +16,9 @@
     "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx scripts/seed.ts",
+    "admin:promote": "tsx scripts/promote-super-admin.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
