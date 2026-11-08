@@ -4,7 +4,7 @@ Every club event. One tap to get in.
 
 Turnout is a club and event platform for a college campus. Clubs publish events, students register and get a QR ticket, and volunteers scan tickets at the door.
 
-**Status:** Phase 0 (foundation). Google sign-in restricted to college email domains works; clubs and events come next.
+**Status:** Phase 1 complete: college-only Google sign-in, club requests and approval, per-club roles, email invites, a super admin area and an audit log. Events and tickets come next.
 
 ## Stack
 
@@ -36,6 +36,16 @@ In `.env`, set `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) and the two Goog
 
 While the app is in Testing mode, only accounts listed as test users can sign in.
 
+### Become a super admin
+
+Sign in once, then run:
+
+```bash
+pnpm admin:promote your.email@nst.rishihood.edu.in
+```
+
+After that, promote others from `/admin/super-admins`.
+
 ## Commands
 
 | Command | What it does |
@@ -50,3 +60,5 @@ While the app is in Testing mode, only accounts listed as test users can sign in
 | `pnpm db:generate` | Create a migration from `schema.ts` |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm db:studio` | Browse the database |
+| `pnpm db:seed` | Add demo users and clubs, all flagged `is_test` (local databases only) |
+| `pnpm admin:promote <email>` | Make an existing user a super admin |
