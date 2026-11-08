@@ -1,0 +1,10 @@
+# The background worker, deployed as its own long-running service.
+FROM node:26-alpine
+WORKDIR /app
+RUN npm install -g pnpm@12.18.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile --prod
+COPY tsconfig.json ./
+COPY src ./src
+COPY worker ./worker
+CMD ["pnpm", "worker"]
