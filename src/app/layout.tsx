@@ -3,6 +3,7 @@ import { Atkinson_Hyperlegible, Big_Shoulders } from "next/font/google";
 
 import { SiteHeader } from "@/components/site-header";
 import { brand } from "@/lib/brand";
+import { env } from "@/lib/env";
 
 import "./globals.css";
 
@@ -21,6 +22,7 @@ const body = Atkinson_Hyperlegible({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(env.APP_URL),
   title: { default: brand.name, template: `%s | ${brand.name}` },
   description: brand.description,
 };

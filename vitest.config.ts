@@ -13,7 +13,11 @@ export default defineConfig({
     projects: [
       {
         resolve,
-        test: { name: "unit", include: ["tests/unit/**/*.test.ts"] },
+        test: {
+          name: "unit",
+          include: ["tests/unit/**/*.test.ts"],
+          env: integrationEnv,
+        },
       },
       {
         resolve,

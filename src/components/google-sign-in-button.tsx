@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 
-export function GoogleSignInButton() {
+export function GoogleSignInButton({ next }: { next: string }) {
   const [status, setStatus] = useState<"idle" | "redirecting" | "failed">(
     "idle",
   );
@@ -14,7 +14,7 @@ export function GoogleSignInButton() {
     setStatus("redirecting");
     const { error } = await authClient.signIn.social({
       provider: "google",
-      callbackURL: "/",
+      callbackURL: next,
       errorCallbackURL: "/sign-in",
     });
     if (error) setStatus("failed");

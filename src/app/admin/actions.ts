@@ -3,10 +3,14 @@
 import { revalidatePath } from "next/cache";
 
 import type { FormAction } from "@/lib/action-result";
-import { clubIdSchema, setPlatformRoleSchema } from "@/lib/validation";
+import {
+  clubIdSchema,
+  retryJobSchema,
+  setPlatformRoleSchema,
+} from "@/lib/validation";
 import { requireActor } from "@/server/auth/session";
 import { runAction } from "@/server/run-action";
-import { setPlatformRole } from "@/server/services/admin";
+import { retryFailedJob, setPlatformRole } from "@/server/services/admin";
 import { approveClub, archiveClub } from "@/server/services/clubs";
 
 export const approveClubAction: FormAction = async (_previous, formData) =>
@@ -31,4 +35,11 @@ export const setPlatformRoleAction: FormAction = async (_previous, formData) =>
     return input.role === "SUPER_ADMIN"
       ? `${input.email} is now a super admin.`
       : `${input.email} is no longer a super admin.`;
+  });
+
+export const retryJobAction: FormAction = async (_previous, formData) =>
+  runAction(async () => {
+    const input = retryJobSchema.parse(Object.fromEntries(formData));
+    await retryFailedJob(await requireActor(), input);
+    revalidatePath("/admin/jobs");
   });

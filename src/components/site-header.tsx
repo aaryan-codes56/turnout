@@ -18,8 +18,11 @@ export async function SiteHeader() {
       </Link>
       {actor ? (
         <nav className="flex flex-wrap items-center justify-end gap-x-3 sm:gap-x-5">
+          <Link href="/tickets" className={navLink}>
+            Tickets
+          </Link>
           <Link href="/dashboard" className={navLink}>
-            Your clubs
+            Clubs
           </Link>
           {can(actor, "club.approve") && (
             <Link href="/admin" className={navLink}>

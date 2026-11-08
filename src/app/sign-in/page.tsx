@@ -20,14 +20,23 @@ function errorMessage(code: string | string[] | undefined): string | null {
   return "Sign-in didn't finish. Try again.";
 }
 
+/** Only same-site paths, so a link can't bounce people to another website. */
+function safeNextPath(next: string | string[] | undefined): string {
+  if (typeof next !== "string") return "/";
+  return next.startsWith("/") && !next.startsWith("//") && !next.includes("\\")
+    ? next
+    : "/";
+}
+
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[] }>;
+  searchParams: Promise<{ error?: string | string[]; next?: string | string[] }>;
 }) {
-  if (await getCurrentUser()) redirect("/");
+  const { error, next } = await searchParams;
+  const destination = safeNextPath(next);
+  if (await getCurrentUser()) redirect(destination);
 
-  const { error } = await searchParams;
   const message = errorMessage(error);
 
   return (
@@ -46,7 +55,7 @@ export default async function SignInPage({
         </p>
       )}
       <div className="mt-8">
-        <GoogleSignInButton />
+        <GoogleSignInButton next={destination} />
       </div>
     </main>
   );
