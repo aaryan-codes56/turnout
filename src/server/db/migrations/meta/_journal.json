@@ -8,6 +8,13 @@
       "when": 1794168830234,
       "tag": "0000_superb_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794169545898,
+      "tag": "0001_short_mordo",
+      "breakpoints": true
     }
   ]
 }
