@@ -1,7 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
+  date,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -11,6 +14,11 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+import type {
+  CustomQuestion,
+  RegistrationAnswers,
+} from "../../lib/event-questions";
 
 export const platformRole = pgEnum("platform_role", ["USER", "SUPER_ADMIN"]);
 export const clubStatus = pgEnum("club_status", [
@@ -186,4 +194,154 @@ export const auditLogs = pgTable(
     index("audit_logs_entity_idx").on(table.entityType, table.entityId),
     index("audit_logs_created_at_idx").on(table.createdAt.desc()),
   ],
+);
+
+export const eventStatus = pgEnum("event_status", [
+  "DRAFT",
+  "PUBLISHED",
+  "COMPLETED",
+  "CANCELLED",
+]);
+export const registrationStatus = pgEnum("registration_status", [
+  "PENDING_PAYMENT",
+  "CONFIRMED",
+  "CANCELLED",
+  "EXPIRED",
+  "REFUNDED",
+]);
+export const paymentStatus = pgEnum("payment_status", [
+  "CREATED",
+  "CAPTURED",
+  "FAILED",
+  "REFUNDED",
+]);
+export const paymentMode = pgEnum("payment_mode", ["TEST", "LIVE"]);
+
+export const events = pgTable(
+  "events",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    clubId: uuid()
+      .notNull()
+      .references(() => clubs.id, { onDelete: "restrict" }),
+    slug: text().notNull().unique(),
+    title: text().notNull(),
+    descriptionMd: text().notNull(),
+    coverUrl: text(),
+    venue: text().notNull(),
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    endsAt: timestamp({ withTimezone: true }).notNull(),
+    capacity: integer().notNull(),
+    seatsTaken: integer().notNull().default(0),
+    pricePaise: integer().notNull().default(0),
+    status: eventStatus().notNull().default("DRAFT"),
+    registrationOpensAt: timestamp({ withTimezone: true }).notNull(),
+    registrationClosesAt: timestamp({ withTimezone: true }).notNull(),
+    checkinOpensBeforeMinutes: integer().notNull().default(120),
+    customQuestions: jsonb()
+      .$type<CustomQuestion[]>()
+      .notNull()
+      .default([]),
+    isTest: boolean().notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("events_club_id_idx").on(table.clubId),
+    index("events_status_starts_at_idx").on(table.status, table.startsAt),
+    // The application reserves seats atomically. This is the backstop that
+    // makes overselling impossible even if that code is ever wrong.
+    check(
+      "events_seats_within_capacity",
+      sql`${table.seatsTaken} >= 0 AND ${table.seatsTaken} <= ${table.capacity}`,
+    ),
+    check("events_ends_after_start", sql`${table.endsAt} > ${table.startsAt}`),
+    check("events_price_not_negative", sql`${table.pricePaise} >= 0`),
+  ],
+);
+
+export const registrations = pgTable(
+  "registrations",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    eventId: uuid()
+      .notNull()
+      .references(() => events.id, { onDelete: "restrict" }),
+    userId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: registrationStatus().notNull(),
+    answers: jsonb().$type<RegistrationAnswers>().notNull().default({}),
+    holdExpiresAt: timestamp({ withTimezone: true }),
+    checkedInAt: timestamp({ withTimezone: true }),
+    checkedInBy: uuid().references(() => users.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("registrations_one_active_idx")
+      .on(table.eventId, table.userId)
+      .where(sql`${table.status} IN ('PENDING_PAYMENT', 'CONFIRMED')`),
+    index("registrations_event_status_idx").on(table.eventId, table.status),
+    index("registrations_user_id_idx").on(table.userId),
+    index("registrations_checked_in_by_idx").on(table.checkedInBy),
+    index("registrations_expiring_holds_idx")
+      .on(table.holdExpiresAt)
+      .where(sql`${table.status} = 'PENDING_PAYMENT'`),
+  ],
+);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    registrationId: uuid()
+      .notNull()
+      .references(() => registrations.id, { onDelete: "restrict" }),
+    razorpayOrderId: text().notNull().unique(),
+    razorpayPaymentId: text(),
+    razorpayRefundId: text(),
+    amountPaise: integer().notNull(),
+    status: paymentStatus().notNull().default("CREATED"),
+    mode: paymentMode().notNull(),
+    raw: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("payments_registration_id_idx").on(table.registrationId),
+    index("payments_razorpay_payment_id_idx").on(table.razorpayPaymentId),
+  ],
+);
+
+export const webhookEvents = pgTable("webhook_events", {
+  id: text().primaryKey(),
+  type: text().notNull(),
+  payload: jsonb().$type<Record<string, unknown>>().notNull(),
+  receivedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp({ withTimezone: true }),
+});
+
+export const metricsSnapshots = pgTable("metrics_snapshots", {
+  date: date({ mode: "string" }).primaryKey(),
+  activeClubs: integer().notNull(),
+  events: integer().notNull(),
+  checkins: integer().notNull(),
+  uniqueAttendees: integer().notNull(),
+});
+
+// One row per email that has gone out, so a retried job can't send it twice.
+export const sentEmails = pgTable("sent_emails", {
+  key: text().primaryKey(),
+  sentAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text().primaryKey(),
+    windowStart: timestamp({ withTimezone: true }).notNull(),
+    count: integer().notNull(),
+  },
+  (table) => [index("rate_limits_window_start_idx").on(table.windowStart)],
 );
