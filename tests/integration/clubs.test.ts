@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { db, pool } from "@/server/db/client";
+import { db } from "@/server/db/client";
 import { clubMemberships, clubs } from "@/server/db/schema";
 import { ConflictError, ForbiddenError } from "@/server/errors";
 import {
@@ -17,6 +17,7 @@ import {
   auditActions,
   createClub,
   createUser,
+  closeConnections,
   resetDatabase,
   settle,
 } from "./helpers";
@@ -28,7 +29,7 @@ const input = {
 };
 
 beforeEach(resetDatabase);
-afterAll(() => pool.end());
+afterAll(closeConnections);
 
 describe("requestClub", () => {
   it("creates a pending club with no members yet", async () => {

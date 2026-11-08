@@ -1,10 +1,11 @@
-import { asc, count, desc, eq } from "drizzle-orm";
+import { asc, count, desc, eq, sql } from "drizzle-orm";
 
 import type { SetPlatformRoleInput } from "@/lib/validation";
 import { type Actor, assertCan } from "@/server/auth/permissions";
 import { db } from "@/server/db/client";
 import { auditLogs, users } from "@/server/db/schema";
 import { ConflictError, NotFoundError } from "@/server/errors";
+import { getBoss } from "@/server/jobs/queue";
 
 import { recordAudit } from "./audit";
 
@@ -88,4 +89,49 @@ export async function listAuditLogs(actor: Actor, page: number) {
     db.select({ total: count() }).from(auditLogs),
   ]);
   return { entries, total };
+}
+
+export async function listFailedJobs(actor: Actor) {
+  assertCan(actor, "platform.viewFailedJobs");
+
+  // pg-boss has no "list all failed jobs" call, so this reads its table.
+  const { rows } = await db.execute<{
+    id: string;
+    name: string;
+    data: unknown;
+    output: unknown;
+    retry_count: number;
+    completed_on: Date | null;
+  }>(sql`
+    SELECT id, name, data, output, retry_count, completed_on
+    FROM pgboss.job
+    WHERE state = 'failed'
+    ORDER BY completed_on DESC NULLS LAST
+    LIMIT 100
+  `);
+  return rows;
+}
+
+export async function retryFailedJob(
+  actor: Actor,
+  { name, id }: { name: string; id: string },
+) {
+  assertCan(actor, "platform.viewFailedJobs");
+
+  const { rows } = await db.execute(sql`
+    SELECT 1 FROM pgboss.job WHERE id = ${id} AND name = ${name} AND state = 'failed'
+  `);
+  if (rows.length === 0) {
+    throw new ConflictError("That job can no longer be retried.");
+  }
+
+  const boss = await getBoss();
+  await boss.retry(name, id);
+  await recordAudit(db, {
+    actorId: actor.id,
+    action: "job.retried",
+    entityType: "job",
+    entityId: id,
+    metadata: { name },
+  });
 }

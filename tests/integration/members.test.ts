@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { db, pool } from "@/server/db/client";
+import { db } from "@/server/db/client";
 import { clubInvites, clubMemberships } from "@/server/db/schema";
 import {
   ConflictError,
@@ -24,6 +24,7 @@ import {
   auditActions,
   createClub,
   createUser,
+  closeConnections,
   resetDatabase,
   settle,
 } from "./helpers";
@@ -60,7 +61,7 @@ async function ownerCount(clubId: string) {
 }
 
 beforeEach(resetDatabase);
-afterAll(() => pool.end());
+afterAll(closeConnections);
 
 describe("inviteMember", () => {
   it("adds someone with an account straight away", async () => {

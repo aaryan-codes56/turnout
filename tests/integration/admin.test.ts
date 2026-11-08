@@ -1,17 +1,30 @@
+import { randomUUID } from "node:crypto";
+
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { db, pool } from "@/server/db/client";
+import { db } from "@/server/db/client";
 import { auditLogs, users } from "@/server/db/schema";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/server/errors";
+import { JOBS } from "@/server/jobs/definitions";
+import { getBoss } from "@/server/jobs/queue";
 import {
   AUDIT_PAGE_SIZE,
   listAuditLogs,
+  listFailedJobs,
   listSuperAdmins,
+  retryFailedJob,
   setPlatformRole,
 } from "@/server/services/admin";
 
-import { actorOf, auditActions, createUser, resetDatabase, settle } from "./helpers";
+import {
+  actorOf,
+  auditActions,
+  closeConnections,
+  createUser,
+  resetDatabase,
+  settle,
+} from "./helpers";
 
 async function platformRoleOf(id: string) {
   const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -19,7 +32,7 @@ async function platformRoleOf(id: string) {
 }
 
 beforeEach(resetDatabase);
-afterAll(() => pool.end());
+afterAll(closeConnections);
 
 describe("setPlatformRole", () => {
   it("promotes a user and logs it", async () => {
@@ -93,6 +106,39 @@ describe("setPlatformRole", () => {
     await expect(listSuperAdmins(await actorOf(other))).rejects.toThrow(
       ForbiddenError,
     );
+  });
+});
+
+describe("failed jobs", () => {
+  async function failedJob() {
+    const boss = await getBoss();
+    const id = randomUUID();
+    await boss.send(JOBS.metricsSnapshot, {}, { id, retryLimit: 0 });
+    const [job] = await boss.fetch(JOBS.metricsSnapshot);
+    await boss.fail(JOBS.metricsSnapshot, job.id, { message: "boom" });
+    return id;
+  }
+
+  it("lists a failed job and retries it", async () => {
+    const admin = await actorOf(await createUser("SUPER_ADMIN"));
+    const id = await failedJob();
+
+    expect(await listFailedJobs(admin)).toMatchObject([
+      { id, name: JOBS.metricsSnapshot },
+    ]);
+
+    await retryFailedJob(admin, { name: JOBS.metricsSnapshot, id });
+
+    expect(await listFailedJobs(admin)).toEqual([]);
+    expect(await auditActions()).toEqual(["job.retried"]);
+  });
+
+  it("is refused for a regular user", async () => {
+    const student = await actorOf(await createUser());
+    await expect(listFailedJobs(student)).rejects.toThrow(ForbiddenError);
+    await expect(
+      retryFailedJob(student, { name: JOBS.metricsSnapshot, id: randomUUID() }),
+    ).rejects.toThrow(ForbiddenError);
   });
 });
 
